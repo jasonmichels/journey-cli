@@ -1,7 +1,6 @@
 {
     "name": "unique-journey-section-name",
     "version": "1.0.0",
-    "bucket": "my-aws-bucket",
     "rootID": "some-unique-div-needed-for-react-component",
     "build": "./build/",
     "manifest": "./build/asset-manifest.json"

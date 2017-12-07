@@ -147,11 +147,18 @@ func uploadToS3(bucket string, path string, key string, uploader *s3manager.Uplo
 
 func main() {
 
+	// add getting bucket from a flag or environment
+
 	journeyPath = flag.String("journey", "journey.json", "Location of the journey.json file")
 	cmd := flag.String("cmd", publish, "Command to invoke, eg: publish")
+	bucket := flag.String("bucket", "", "AWS S3 bucket")
 	flag.Parse()
 
-	loadJourneyConfig(*journeyPath)
+	if err := loadJourneyConfig(*journeyPath); err != nil {
+		panic(err)
+	}
+
+	journey.Bucket = *bucket
 
 	validate = validator.New()
 	if err := journey.Validate(); err != nil {
