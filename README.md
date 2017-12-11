@@ -5,5 +5,5 @@ See example journey.json file and the required command line arguments
 
 ### Example Usage
 ```sh
-$ journey-cli -journey=journey.json -cmd=publish -bucket=nameOfBucket -cdn=https://changeMe.cloudfront.net/
+$ journey-cli -journey=journey.json -cmd=publish -bucket=nameOfBucket -cdn=https://changeMe.cloudfront.net/ -region=us-east-1
 ```
