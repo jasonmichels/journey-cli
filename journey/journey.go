@@ -106,8 +106,8 @@ func (j *Journey) ValidateVersionNotUsed(sess *session.Session) (bool, error) {
 }
 
 // Publish Publish the assets using the journey configuration
-func (j *Journey) Publish(assets map[string]string) error {
-	sess, err := session.NewSession(&aws.Config{Region: aws.String("us-east-1")})
+func (j *Journey) Publish(assets map[string]string, awsConfig *aws.Config) error {
+	sess, err := session.NewSession(awsConfig)
 	if err != nil {
 		log.Println("Error creating AWS session ", err)
 		return err
