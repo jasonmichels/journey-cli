@@ -16,43 +16,25 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	jr "github.com/jasonmichels/journey-registry/journey"
 )
 
-// CSS Struct for tracking public data of a css object
-type CSS struct {
-	URL string `json:"url"`
-}
-
-// JS Struct for tracking public data of a js object
-type JS struct {
-	URL    string `json:"url"`
-	RootID string `json:"rootID"`
-}
-
-// Urls The urls of the assets are tracking
-type Urls struct {
-	CSS []CSS `json:"css"`
-	JS  []JS  `json:"js"`
-}
-
-// Publish Publish the journey urls to the package and version
-func (urls *Urls) Publish(journey *Journey, uploader *s3manager.Uploader, wg *sync.WaitGroup) (*s3manager.UploadOutput, error) {
+// PublishJourneyPublicUrls Publish the journey urls to the package and version
+func PublishJourneyPublicUrls(version *jr.Version, j *Journey, uploader *s3manager.Uploader, wg *sync.WaitGroup) (*s3manager.UploadOutput, error) {
 	defer wg.Done()
-	log.Printf("Starting to upload static asset urls to this bucket: %v", journey.Bucket)
+	log.Printf("Starting to upload static asset urls to this bucket: %v", j.Bucket)
 
-	key := journey.Name + "/" + journey.Version + "/journey-urls.json"
-
-	data, err := json.Marshal(urls)
+	data, err := json.Marshal(version)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse the journey urls into json")
 	}
 
 	// Upload the static assest urls to S3
 	return uploader.Upload(&s3manager.UploadInput{
-		Bucket:      aws.String(journey.Bucket),
-		Key:         aws.String(key),
+		Bucket:      aws.String(j.Bucket),
+		Key:         aws.String(j.GetJourneyURLPath()),
 		Body:        bytes.NewReader(data),
-		ContentType: aws.String("application/javascript"),
+		ContentType: aws.String("application/json"),
 	})
 }
 
@@ -66,6 +48,11 @@ type Journey struct {
 	Bucket      string `json:"bucket" validate:"required"`
 	JourneyPath string `validate:"required"`
 	CDNDomain   string `validate:"required"`
+}
+
+// GetJourneyURLPath Get the journey-urls.json path in S3
+func (j *Journey) GetJourneyURLPath() string {
+	return j.Name + "/" + j.Version + "/journey-urls.json"
 }
 
 // Validate Validate the journey config is correct
@@ -106,13 +93,7 @@ func (j *Journey) ValidateVersionNotUsed(sess *session.Session) (bool, error) {
 }
 
 // Publish Publish the assets using the journey configuration
-func (j *Journey) Publish(assets map[string]string, awsConfig *aws.Config) error {
-	sess, err := session.NewSession(awsConfig)
-	if err != nil {
-		log.Println("Error creating AWS session ", err)
-		return err
-	}
-
+func (j *Journey) Publish(assets map[string]string, sess *session.Session) error {
 	// check to make sure a directory in S3 does not exist with the Version
 	if ok, err := j.ValidateVersionNotUsed(sess); !ok {
 		return err
@@ -122,9 +103,9 @@ func (j *Journey) Publish(assets map[string]string, awsConfig *aws.Config) error
 	// Create an uploader with the session and default options
 	uploader := s3manager.NewUploader(sess)
 
-	urls := j.BuildJourneyUrls(assets)
+	version := j.BuildJourneyPublicUrls(assets)
 
-	log.Printf("Getting ready to upload %v files...", len(assets)+2)
+	log.Printf("Getting ready to upload %v files...", len(assets)+3)
 	var wg sync.WaitGroup
 	wg.Add(len(assets) + 3)
 
@@ -135,17 +116,17 @@ func (j *Journey) Publish(assets map[string]string, awsConfig *aws.Config) error
 	// make sure to put the journey.json, and asset-manifest.json file into {bucket}/{name}/{version}/
 	go uploadToS3(j.Bucket, j.Manifest, j.GetAssetKey("asset-manifest.json"), uploader, &wg)
 	go uploadToS3(j.Bucket, j.JourneyPath, j.GetAssetKey("journey.json"), uploader, &wg)
-	go urls.Publish(j, uploader, &wg)
+	go PublishJourneyPublicUrls(version, j, uploader, &wg)
 	wg.Wait()
 
 	return nil
 }
 
-// BuildJourneyUrls Build the Journey Urls struct to have a list of css and js objects
-func (j *Journey) BuildJourneyUrls(assets map[string]string) *Urls {
-	var urls Urls
-	var css []CSS
-	var js []JS
+// BuildJourneyPublicUrls Build the Journey Urls struct to have a list of css and js objects
+func (j *Journey) BuildJourneyPublicUrls(assets map[string]string) *jr.Version {
+	version := jr.Version{}
+	var css []*jr.CSS
+	var js []*jr.JS
 
 	for _, v := range assets {
 		// URL structure https://changeme.cloudfront.net/{j.Name}/{j.Version}/path
@@ -153,18 +134,17 @@ func (j *Journey) BuildJourneyUrls(assets map[string]string) *Urls {
 
 		switch ext := filepath.Ext(v); ext {
 		case ".css":
-			css = append(css, CSS{URL: url})
+			css = append(css, &jr.CSS{Url: url})
 		case ".js":
-			js = append(js, JS{URL: url, RootID: j.RootID})
+			js = append(js, &jr.JS{Url: url, RootID: j.RootID})
 		default:
 			log.Printf("Do not support adding %v files to journey-urls.json", ext)
 		}
 	}
+	version.Css = css
+	version.Js = js
 
-	urls.CSS = css
-	urls.JS = js
-
-	return &urls
+	return &version
 }
 
 // getContentType Get the content type of a file path

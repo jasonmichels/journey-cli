@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/jasonmichels/journey-cli/journey"
 
 	"gopkg.in/go-playground/validator.v9"
@@ -15,8 +16,10 @@ import (
 
 var j journey.Journey
 var assets map[string]string
+var sess *session.Session
 
 const publish = "publish"
+const setLatest = "setLatest"
 
 func loadConfig(path string, v interface{}) error {
 	abs, err := filepath.Abs(path)
@@ -54,8 +57,10 @@ func main() {
 		log.Panic(err)
 	}
 
-	// lets create a new aws config
-	awsConfig := aws.Config{Region: aws.String(*region)}
+	sess, err := session.NewSession(&aws.Config{Region: aws.String(*region)})
+	if err != nil {
+		log.Fatalf("Error creating AWS session %v", err.Error())
+	}
 
 	switch *cmd {
 	case publish:
@@ -64,10 +69,16 @@ func main() {
 		}
 		log.Println("Successfully loaded Asset Manifest configuration")
 
-		if err := j.Publish(assets, &awsConfig); err != nil {
+		if err := j.Publish(assets, sess); err != nil {
 			log.Panic(err)
 		}
 		log.Println("Finished publishing all assets to S3")
+	case setLatest:
+		latest := journey.Latest{}
+		if _, err := latest.SetLatest(&j, sess); err != nil {
+			log.Panic(err)
+		}
+		log.Printf("Finished setting %v of %v to Latest tag", j.Version, j.Name)
 	default:
 		log.Fatalf("Do not recognize command: %v", *cmd)
 	}
